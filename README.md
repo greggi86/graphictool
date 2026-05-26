@@ -4,6 +4,8 @@ A browser-based graphic editor built entirely in **vanilla JavaScript** — no f
 
 The project is a work in progress. The goal is a Figma-style canvas editor that runs in the browser without any dependencies.
 
+**Live demo:** https://fabulous-alfajores-a23609.netlify.app
+
 ---
 
 ## State Management
