@@ -1,0 +1,943 @@
+
+/* 
+todo
+-> proportiales skalieren ->schloss bei werten & kurzbefehl shift bei mousenavigation
+-> einheitliches rotationfenster ?? -> left bar
+-> transform kurzbefehle über bounding box
+-> kurbefehltasten für texteingabe 
+-> fenster für skalierung bei erstellen von objekten
+-> boundingbox drehen bei gedrehtem objekt
+-> slider für transformationen bei click
+-> lineale
+-> grid snappy
+-> grid spalten und reihen
+-> Borderradius
+-> bezeierpunkte und kurven
+-> setState in dispatcher aufnehmen
+*/
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Canvas Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #f0f0f0;
+  --surface: #ffffff;
+  --surface2: #f7f7f7;
+  --surface3: #efefef;
+  --border: #e2e2e2;
+  --border2: #d0d0d0;
+  --text: #1a1a1a;
+  --text2: #555;
+  --text3: #999;
+  --accent: #2563eb;
+  --accent-light: #eff6ff;
+  --accent-hover: #1d4ed8;
+  --danger: #ef4444;
+  --sidebar-w: 64px;
+  --panel-w: 260px;
+  --header-h: 48px;
+  --radius: 8px;
+  --radius-sm: 5px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
+}
+
+body {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+header {
+  height: var(--header-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.logo {
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: 8px;
+}
+.logo-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+  
+.header-nav {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+
+.nav-tab {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.nav-tab:hover { 
+  background: var(--surface2);
+  color: var(--text); 
+}
+
+.nav-tab.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  font-weight: 500; 
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grid-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.grid-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent); 
+}
+
+.grid-toggle.on {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent);
+ }
+
+.btn-icon {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.1s;
+  font-size: 15px;
+}
+
+.btn-icon:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-export {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-export:hover { 
+    background: var(--accent-hover);
+ }
+
+.app-body { 
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    height: 100vh;       
+    min-height: 0;  
+ }
+
+/* SIDEBAR */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.side-btn {
+  width: 44px; height: 50px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 4px;
+  border-radius: var(--radius);
+  border: none;
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.1s;
+  font-size: 10px;
+  font-family: inherit;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.side-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.side-btn.active {
+  background: var(--accent-light);
+  color: var(--accent); 
+}
+
+.side-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.sidebar-sep {
+  width: 32px;
+  height: 1px; 
+  background: var(--border);
+  margin: 4px 0;
+ }
+
+/* CANVAS AREA */
+.canvas-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  background-image: radial-gradient(circle, #c4c4c4 1px, transparent 1px);
+  background-size: 20px 20px;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;    
+}
+
+.canvas-wrap.mode-shape {
+   cursor: crosshair;
+}
+
+.canvas-wrap.mode-text { 
+  cursor: text; 
+}
+
+.canvas-wrap.mode-select { 
+  cursor: default; 
+}
+
+.canvas-container {
+  position: relative;
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(0,0,0,0.06);
+  transform-origin: center center;
+  transition: transform 0.15s;
+}
+
+#canvas, #grid-overlay {
+  display: block;
+  position: absolute;
+  top: 0; left: 0;
+}
+#canvas {
+  position: relative;
+}
+
+#grid-overlay {
+  pointer-events: none; 
+}
+
+.zoom-bar {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12px;
+  color: var(--text2);
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+  font-family: 'Geist Mono', monospace;
+}
+
+.zoom-btn {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text2);
+  transition: all 0.1s;
+  line-height: 1;
+}
+.zoom-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.sel-info {
+  position: absolute;
+  bottom: 60px; right: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text2);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-family: 'Geist Mono', monospace;
+}
+.sel-info.on {
+   opacity: 1;
+  }
+
+/* RIGHT PANEL */
+.panel {
+  width: var(--panel-w);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.panel-sec {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.sec-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sec-label-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text3); font-size: 16px; line-height: 1;
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; transition: all 0.1s;
+}
+.sec-label-btn:hover {
+  background: var(--surface2);
+  color: var(--danger); 
+}
+
+.prop-grid { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 8px; 
+  margin-bottom: 8px; 
+}
+
+.prop-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.prop-lbl {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.prop-inp {
+  display: flex; align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 8px; height: 32px; gap: 4px;
+  transition: border-color 0.1s;
+}
+.prop-inp:focus-within { 
+  border-color: var(--accent); 
+  background: var(--accent-light);
+ }
+.prop-inp input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: 'Geist Mono', monospace;
+  font-size: 12px;
+  color: var(--text);
+  outline: none;
+    min-width: 0;
+  width: 0; 
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 20 10'%3E%3Cpath d='M0 5h20M0 5l4-4M0 5l4 4M20 5l-4-4M20 5l-4 4' stroke='%231a1a1a' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") 10 5, ew-resize;
+}
+.prop-inp .unit {
+  font-size: 11px;
+  color: var(--text3); 
+  font-family: 'Geist Mono', monospace;
+  flex-shrink: 0;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid rgba(0,0,0,0.12);
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+}
+.swatch input[type="color"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
+/* shapes */
+.shape-tabs {
+  display: grid;
+  grid-template-columns: repeat(5,1fr);
+  gap: 4px;
+  margin-bottom: 12px; 
+}
+
+.shape-tab {
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+  font-size: 15px;
+  transition: all 0.1s;
+}
+
+.shape-tab:hover { 
+  border-color: var(--accent); 
+  color: var(--accent); 
+}
+
+.shape-tab.active { 
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white; 
+}
+
+/* slider */
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px; 
+  margin-bottom: 10px;
+}
+
+.slider-lbl { 
+  font-size: 11px;
+  color: var(--text3);
+  min-width: 68px; 
+}
+
+input[type="range"] {
+  flex: 1;
+  appearance: none;
+  height: 3px;
+  background: var(--border2);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  background: var(--accent);
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.slider-v {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  color: var(--text2);
+  min-width: 30px;
+  text-align: right; 
+}
+
+select {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  margin-bottom: 6px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+textarea {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 8px;
+  resize: vertical;
+  min-height: 60px;
+  outline: none;
+  transition: border-color 0.1s;
+  margin-bottom: 8px;
+}
+
+textarea:focus {
+  border-color: var(--accent); 
+}
+
+/* layers */
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.1s;
+  margin-bottom: 2px;
+  background: yellow !important;
+  min-height: 30px;
+}
+
+.layer-item:hover {
+  background: var(--surface2); 
+}
+
+.layer-item.sel {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+
+.layer-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px; 
+  flex-shrink: 0;
+}
+
+#lay-list {
+  background: red !important;
+}
+.layer-nm {
+  flex: 1;
+  font-size: 12px; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  white-space: nowrap; 
+}
+
+.layer-x {
+  opacity: 0;
+  background: none; 
+  border: none; 
+  color: var(--text3);
+  cursor: pointer; 
+  font-size: 16px; 
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: all 0.1s;
+}
+
+.layer-item:hover .layer-x {
+  opacity: 1;
+}
+.layer-x:hover {
+  color: var(--danger);
+  background: #fff0f0;
+}
+
+.empty-lay {
+  text-align: center;
+  color: var(--text3); 
+  font-size: 12px; 
+  padding: 24px 0;
+}
+
+.hint { 
+  font-size: 11px;
+  color: var(--text3); 
+  margin-top: 6px; 
+  flex-wrap: wrap;
+}
+
+::-webkit-scrollbar {
+  width: 5px; 
+  }
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border2);
+  border-radius: 3px;
+}
+
+.layer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.layer-item:hover .layer-actions { opacity: 1; }
+
+.layer-act {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 13px;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 3px;
+  transition: all 0.1s;
+}
+.layer-act:hover { background: var(--surface3); color: var(--text); }
+.layer-act.act-on { color: var(--accent); }
+
+.layer-item.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.layer-item.dragging { opacity: 0.4; }
+.layer-item.hidden-layer .layer-nm { text-decoration: line-through; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-dot"></div>Canvas Editor</div>
+  <nav class="header-nav">
+    <button class="nav-tab active">Editor</button>
+    <button class="nav-tab">Templates</button>
+    <button class="nav-tab">Export</button>
+  </nav>
+  <div class="header-right">
+    <button class="grid-toggle" id="grid-btn" onclick="toggleGridPanel()">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 5h14M1 11h14M5 1v14M11 1v14"/></svg>
+      Grid
+    </button>
+    <button class="btn-icon" title="Undo (Cmd+Z)" onclick="undo()">↩</button>
+    <button class="btn-icon" title="Als PNG exportieren" onclick="exportPNG()">↓ PNG</button>
+    <input type="file" id="imp" accept=".json" style="display:none" onchange="importJSON(this.files[0])">
+    <button class="btn-icon" onclick="document.getElementById('imp').click()">↑ JSON</button>
+    <button class="btn-export" onclick="exportJSON()">Export JSON</button>
+  </div>
+</header>
+
+<div class="app-body">
+
+<aside class="sidebar">
+  <button class="side-btn active" id="tb-select" onclick="setTool('select')" title="Auswählen">
+    <svg viewBox="0 0 18 18" fill="none"><path d="M3 2l12 7-6 1-3 5L3 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+    Select
+  </button>
+  <button class="side-btn" id="tb-shape" onclick="setTool('shape')" title="Shapes">
+    <svg viewBox="0 0 18 18" fill="none"><rect x="2" y="2" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><circle cx="13" cy="5" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M2 16l4-7 4 7H2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+    Shapes
+  </button>
+  <button class="side-btn" id="tb-text" onclick="setTool('text')" title="Text">
+    <svg viewBox="0 0 18 18" fill="none"><path d="M3 4h12M9 4v10M6 14h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    Text
+  </button>
+  <div class="sidebar-sep"></div>
+  <button class="side-btn" id="tb-layers" onclick="setTool('layers')" title="Ebenen">
+    <svg viewBox="0 0 18 18" fill="none"><path d="M2 6l7-4 7 4-7 4-7-4zM2 10l7 4 7-4M2 14l7 4 7-4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+    Layers
+  </button>
+</aside>
+
+<div class="canvas-wrap mode-select" id="cw">
+  <div class="canvas-container" id="cc">
+    <canvas id="canvas" width="1440" height="1028"></canvas>
+    <canvas id="grid-overlay" width="1440" height="1028" style="position:absolute;top:0;left:0;pointer-events:none"></canvas>
+  </div>
+  <div class="zoom-bar">
+    <button class="zoom-btn" onclick="doZoom(-0.1)">−</button>
+    <span id="zoom-lbl">100%</span>
+    <button class="zoom-btn" onclick="doZoom(0.1)">+</button>
+  </div>
+  <div class="sel-info" id="sel-info"></div>
+</div>
+
+<div class="panel" id="panel">
+
+  <!-- TRANSFORM -->
+  <div class="panel-sec">
+    <div class="sec-label">Transform</div>
+    <div class="prop-grid">
+      <div class="prop-field">
+        <div class="prop-lbl">X</div>
+        <div class="prop-inp"><input type="number" id="px" value="400" onchange="applyProps()" class="scrubable"><span class="unit">px</span></div>
+      </div>
+      <div class="prop-field">
+        <div class="prop-lbl">Y</div>
+        <div class="prop-inp"><input type="number" id="py" value="290" onchange="applyProps()" class="scrubable"><span class="unit">px</span></div>
+      </div>
+      <div class="prop-field">
+        <div class="prop-lbl">W / Size</div>
+        <div class="prop-inp"><input type="number" id="pw" value="80" onchange="applyProps()" class="scrubable"><span class="unit">px</span></div>
+      </div>
+      <div class="prop-field">
+        <div class="prop-lbl">H</div>
+        <div class="prop-inp"><input type="number" id="ph" value="80" onchange="applyProps()" class="scrubable"><span class="unit">px</span></div>
+      </div>
+      <div class="prop-field">
+        <div class="prop-lbl">Rotation</div>
+        <div class="prop-inp"><input type="number" id="prot" value="0" min="0" max="360" onchange="applyProps()" class="scrubable"><span class="unit">°</span></div>
+      </div>
+      <div class="prop-field">
+        <div class="prop-lbl">Opacity</div>
+        <div class="prop-inp"><input type="number" id="pop" value="100" min="0" max="100" onchange="applyProps()" class="scrubable"><span class="unit">%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPEARANCE -->
+  <div class="panel-sec">
+    <div class="sec-label">Appearance</div>
+    <div class="prop-grid">
+      <div class="prop-field">
+        <div class="prop-lbl">Fill</div>
+        <div class="prop-inp">
+          <div class="swatch" id="sw-fill"><input type="color" id="col-fill" value="#2563eb" oninput="syncSwatch('fill');applyProps();redrawPreview()"></div>
+          <input type="text" id="hex-fill" value="#2563eb" onchange="syncHex('fill')" style="font-family:'Geist Mono',monospace">
+        </div>
+      </div>
+      <div class="prop-field">
+        <div class="prop-lbl">Stroke</div>
+        <div class="prop-inp">
+          <div class="swatch" id="sw-stroke"><input type="color" id="col-stroke" value="#1d4ed8" oninput="syncSwatch('stroke');applyProps();redrawPreview()"></div>
+          <input type="text" id="hex-stroke" value="#1d4ed8" onchange="syncHex('stroke')" style="font-family:'Geist Mono',monospace">
+        </div>
+      </div>
+      <div class="prop-field">
+        <div class="prop-lbl">Stroke W</div>
+        <div class="prop-inp"><input type="number" id="psw" value="0" min="0" max="20" onchange="applyProps()" class="scrubable"><span class="unit">px</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHAPES -->
+  <div class="panel-sec" id="sec-shapes" style="display:none">
+    <div class="sec-label">Shape</div>
+    <div class="shape-tabs">
+      <button class="shape-tab active" onclick="pickShape('circle')" id="sb-circle" title="Kreis">●</button>
+      <button class="shape-tab" onclick="pickShape('rectangle')" id="sb-rectangle" title="Rechteck">▬</button>
+      <button class="shape-tab" onclick="pickShape('triangle')" id="sb-triangle" title="Dreieck">▲</button>
+      <button class="shape-tab" onclick="pickShape('star')" id="sb-star" title="Stern">★</button>
+      <button class="shape-tab" onclick="pickShape('cloud')" id="sb-cloud" title="Wolke">☁</button>
+    </div>
+    <div id="ex-star" style="display:none">
+      <div class="slider-row">
+        <span class="slider-lbl">Spitzen</span>
+        <input type="range" id="star-pts" min="3" max="20" value="5" oninput="sv('star-pts-v',this.value);redrawPreview()">
+        <span class="slider-v" id="star-pts-v">5</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">Innenradius</span>
+        <input type="range" id="star-ir" min="-100" max="200" value="40" oninput="sv('star-ir-v',this.value+'%');redrawPreview()">
+        <span class="slider-v" id="star-ir-v">40%</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">Chaos</span>
+        <input type="range" id="star-chaos" min="-100" max="200" value="0" oninput="sv('star-chaos-v',this.value+'%');rerollStar();redrawPreview()">
+        <span class="slider-v" id="star-chaos-v">0%</span>
+      </div>
+      <button onclick="rerollStar();redrawPreview()" style="width:100%;padding:6px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:11px;font-family:inherit;margin-top:2px">↺ Neu würfeln</button>
+    </div>
+    <div id="ex-cloud" style="display:none">
+      <div class="slider-row">
+        <span class="slider-lbl">Wölbungen</span>
+        <input type="range" id="cloud-b" min="3" max="12" value="6" oninput="sv('cloud-b-v',this.value);redrawPreview()">
+        <span class="slider-v" id="cloud-b-v">6</span>
+      </div>
+    </div>
+    <p class="hint">Klick auf Canvas platziert die Shape</p>
+  </div>
+
+  <!-- TEXT -->
+<!-- TEXT -->
+<div class="panel-sec" id="sec-text" style="display:none">
+  <div class="sec-label">Text</div>
+  <textarea id="txt-inp" placeholder="Text eingeben..." oninput="redrawPreview()"></textarea>
+  <select id="txt-font" oninput="redrawPreview()">
+    <option value="Geist, sans-serif">Geist</option>
+    <option value="Georgia, serif">Georgia</option>
+    <option value="'Courier New', monospace">Courier New</option>
+    <option value="Impact, sans-serif">Impact</option>
+  </select>
+  <div class="prop-lbl">Weight</div>
+    <select id="txt-wt" oninput="redrawPreview()">
+    <option value= 200>Light</option>
+    <option value= 400>Regular</option>
+    <option value= 600>Medium</option>
+    <option value= 800>Bold</option>
+    <option value= 1000>Black</option>
+  </select>
+  <div class="prop-grid">
+    <div class="prop-field">
+      <div class="prop-lbl">Size</div>
+      <div class="prop-inp"><input type="number" id="txt-sz" value="24" min="8" max="200" oninput="redrawPreview()" class="scrubable"><span class="unit">px</span></div>
+    </div>
+    <div class="prop-field">
+      <div class="prop-lbl">Weight</div>
+      <select id="txt-wt" style="margin:0;height:32px;padding:0 8px" oninput="redrawPreview()">
+        <option value="300">Light</option>
+        <option value="400" selected>Regular</option>
+        <option value="600">Semibold</option>
+        <option value="700">Bold</option>
+      </select>
+    </div>
+    <div class="prop-field">
+      <div class="prop-lbl">Rotation</div>
+      <div class="prop-inp"><input type="number" id="txt-rot" value="0" min="-360" max="360" oninput="redrawPreview()" class="scrubable"><span class="unit">deg</span></div>
+    </div>
+    <div class="prop-field">
+      <div class="prop-lbl">Line-Height</div>
+      <div class="prop-inp"><input type="number" id="txt-hgt" value="24" min="8" max="200" oninput="redrawPreview()" class="scrubable"><span class="unit">px</span></div>
+    </div>
+  </div>
+  <p class="hint">Klick auf Canvas platziert den Text</p>
+</div>
+
+  <!-- GRID -->
+  <div class="panel-sec" id="sec-grid" style="display:none">
+    <div class="sec-label">Grid / Guides</div>
+    <div class="prop-grid" style="margin-bottom:10px">
+      <div class="prop-field">
+        <div class="prop-lbl">Größe</div>
+        <div class="prop-inp"><input type="number" id="g-sz" value="40" min="5" max="200" onchange="renderGrid()"><span class="unit">px</span></div>
+      </div>
+      <div class="prop-field">
+        <div class="prop-lbl">Typ</div>
+        <select id="g-type" style="margin:0;height:32px;padding:0 8px" onchange="renderGrid()">
+          <option value="lines">Linien</option>
+          <option value="dots">Punkte</option>
+          <option value="columns">Spalten</option>
+        </select>
+      </div>
+      <div class="prop-field">
+        <div class="prop-lbl">Farbe</div>
+        <div class="prop-inp">
+          <div class="swatch"><input type="color" id="g-col" value="#b0c4de" oninput="renderGrid()"></div>
+          <input type="text" id="grid-col" value="Gitterfarbe" style="color:var(--text3);font-size:11px;cursor:default" readonly>
+        </div>
+      </div>
+      <div class="prop-field">
+        <div class="prop-lbl">Opacity</div>
+        <div class="prop-inp"><input type="number" id="g-op" value="60" min="5" max="100" onchange="renderGrid()"><span class="unit">%</span></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="setGridVisible(true)" style="flex:1;padding:7px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:var(--accent);color:white;cursor:pointer;font-size:12px;font-family:inherit;font-weight:500">Anzeigen</button>
+      <button onclick="setGridVisible(false)" style="flex:1;padding:7px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:12px;font-family:inherit">Ausblenden</button>
+    </div>
+  </div>
+
+  <!-- LAYERS -->
+  <div class="panel-sec" id="sec-layers" style="display:none">
+    <div class="sec-label">
+      Layers
+      <button class="sec-label-btn" onclick="clearAll()" title="Alle löschen">✕</button>
+    </div>
+    <div id="lay-list"><div class="empty-lay">Noch keine Elemente</div></div>
+  </div>
+</div>
+</div>
+<script type="module" src="main.js"></script>
+</body>
+</html>
